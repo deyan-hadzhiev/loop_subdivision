@@ -670,7 +670,8 @@ THREE.OrbitControls = function ( object, domElement ) {
 
 		if ( scope.enabled === false ) return;
 
-		event.preventDefault();
+		// dodo - preventing mess up in dat.GUI
+		//event.preventDefault();
 
 		if ( event.button === scope.mouseButtons.ORBIT ) {
 
