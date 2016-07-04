@@ -26,43 +26,61 @@ var startTime = Date.now();
 const epsilon = 1e-6;
 
 var params = {
-	material: 'lambert',
-	meshColor: '#0080ff'
+	material: 'phong',
+	meshColor: '#0080ff',
+	wireframe: false,
+	smooth: true
 };
 
 var currentParams = {
 	mesh: null,
 	meshColor: new THREE.Color(parseInt(params.meshColor.replace('#', '0x'))),
+	phongMat: null,
 	lambertMat: null,
 	normalMat: new THREE.MeshNormalMaterial(),
-	wireframeMat: null,
+	depthMat: new THREE.MeshDepthMaterial(),
 };
 
 // Subdivision
 
-function changeMeshColor() {
-	if (currentParams.mesh) {
-		currentParams.meshColor = new THREE.Color(parseInt(params.meshColor.replace('#', '0x')));
-		currentParams.lambertMat.color = currentParams.meshColor;
-		currentParams.wireframeMat.color = currentParams.meshColor;
-	}
-}
-
 function changeMeshMaterial() {
 	switch (params.material) {
+		case 'phong':
+			currentParams.mesh.material = currentParams.phongMat;
+			break;
 		case 'lambert':
 			currentParams.mesh.material = currentParams.lambertMat;
 			break;
 		case 'normals':
 			currentParams.mesh.material = currentParams.normalMat;
 			break;
-		case 'wireframe':
-			currentParams.mesh.material = currentParams.wireframeMat;
+		case 'depth':
+			currentParams.mesh.material = currentParams.depthMat;
 			break;
 		default:
 			currentParams.mesh.material = currentParams.lambertMat;
 			break;
 	}
+}
+
+function changeMeshColor() {
+	if (currentParams.mesh) {
+		currentParams.meshColor = new THREE.Color(parseInt(params.meshColor.replace('#', '0x')));
+		currentParams.phongMat.color = currentParams.meshColor;
+		currentParams.lambertMat.color = currentParams.meshColor;
+	}
+}
+
+function changeMeshWireframe() {
+	currentParams.phongMat.wireframe = params.wireframe;
+	currentParams.lambertMat.wireframe = params.wireframe;
+	currentParams.normalMat.wireframe = params.wireframe;
+	currentParams.depthMat.wireframe = params.wireframe;
+}
+
+function changeMeshShading() {
+	currentParams.phongMat.shading = (params.smooth ? THREE.SmoothShading : THREE.FlatShading);
+	currentParams.phongMat.needsUpdate = true;
 }
 
 // WebGL initialization and implementation
@@ -73,7 +91,7 @@ function init() {
 	if (!Detector.webgl)
 		Detector.addGetWebGLMessage();
 
-	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 );
+	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 30 );
 
 	controls = new THREE.OrbitControls(camera);
 	controls.addEventListener('change', render);
@@ -104,6 +122,7 @@ function init() {
 	// renderer
 	renderer = new THREE.WebGLRenderer( {antialias: true } );
 	renderer.setSize( window.innerWidth, window.innerHeight );
+	renderer.shadowMap.enabled = true;
 
 	container = document.getElementById('container');
 	container.appendChild(renderer.domElement);
@@ -117,8 +136,10 @@ function init() {
 	window.addEventListener( 'resize', onWindowResize, false );
 
 	gui = new dat.GUI();
-	gui.add(params, 'material', ['lambert', 'normals', 'wireframe']).onChange(changeMeshMaterial);
+	gui.add(params, 'material', ['phong', 'lambert', 'normals', 'depth']).onChange(changeMeshMaterial);
 	gui.addColor(params, 'meshColor').name('color').onChange(changeMeshColor);
+	gui.add(params, 'wireframe').onChange(changeMeshWireframe);
+	gui.add(params, 'smooth').onChange(changeMeshShading);
 
 	updateScene();
 
@@ -132,11 +153,13 @@ function updateScene() {
 		currentParams.lambertMat = new THREE.MeshLambertMaterial({color: currentParams.meshColor}),
 		currentParams.mesh = new THREE.Mesh(
 			new THREE.CubeGeometry(2, 2, 2),
+			//new THREE.SphereGeometry(1, 20, 20),
 			currentParams.lambertMat
 		);
-		currentParams.wireframeMat = new THREE.MeshBasicMaterial({
+		currentParams.phongMat = new THREE.MeshPhongMaterial({
 			color: currentParams.meshColor,
-			wireframe: true
+			shininess: 40,
+			specular: 0x222222
 		});
 		scene.add(currentParams.mesh);
 	}
