@@ -26,7 +26,6 @@ var startTime = Date.now();
 const epsilon = 1e-6;
 
 var params = {
-	wireframe: false,
 	material: 'lambert',
 	meshColor: '#0080ff'
 };
@@ -36,7 +35,7 @@ var currentParams = {
 	meshColor: new THREE.Color(parseInt(params.meshColor.replace('#', '0x'))),
 	lambertMat: null,
 	normalMat: new THREE.MeshNormalMaterial(),
-	wireframe: null,
+	wireframeMat: null,
 };
 
 // Subdivision
@@ -45,12 +44,7 @@ function changeMeshColor() {
 	if (currentParams.mesh) {
 		currentParams.meshColor = new THREE.Color(parseInt(params.meshColor.replace('#', '0x')));
 		currentParams.lambertMat.color = currentParams.meshColor;
-		if (currentParams.wireframe) {
-			scene.remove(currentParams.wireframe);
-			delete currentParams.wireframe;
-			currentParams.wireframe = new THREE.WireframeHelper(currentParams.mesh, currentParams.meshColor);
-			scene.add(currentParams.wireframe);
-		}
+		currentParams.wireframeMat.color = currentParams.meshColor;
 	}
 }
 
@@ -62,24 +56,13 @@ function changeMeshMaterial() {
 		case 'normals':
 			currentParams.mesh.material = currentParams.normalMat;
 			break;
+		case 'wireframe':
+			currentParams.mesh.material = currentParams.wireframeMat;
+			break;
 		default:
-			currentParams.mesh.matere = currentParams.lambertMat;
+			currentParams.mesh.material = currentParams.lambertMat;
 			break;
 	}
-}
-
-function changeMeshWireframe() {
-	if (params.wireframe) {
-		currentParams.wireframe = new THREE.WireframeHelper(currentParams.mesh, currentParams.meshColor);
-		scene.add(currentParams.wireframe);
-	} else {
-		if (currentParams.wireframe) {
-			scene.remove(currentParams.wireframe);
-			delete currentParams.wireframe;
-			currentParams.wireframe = null;
-		}
-	}
-	currentParams.mesh.visible = !params.wireframe;
 }
 
 // WebGL initialization and implementation
@@ -134,8 +117,7 @@ function init() {
 	window.addEventListener( 'resize', onWindowResize, false );
 
 	gui = new dat.GUI();
-	gui.add(params, 'wireframe').onChange(changeMeshWireframe);
-	gui.add(params, 'material', ['lambert', 'normals']).onChange(changeMeshMaterial);
+	gui.add(params, 'material', ['lambert', 'normals', 'wireframe']).onChange(changeMeshMaterial);
 	gui.addColor(params, 'meshColor').name('color').onChange(changeMeshColor);
 
 	updateScene();
@@ -152,10 +134,11 @@ function updateScene() {
 			new THREE.CubeGeometry(2, 2, 2),
 			currentParams.lambertMat
 		);
+		currentParams.wireframeMat = new THREE.MeshBasicMaterial({
+			color: currentParams.meshColor,
+			wireframe: true
+		});
 		scene.add(currentParams.mesh);
-		currentParams.wireframe = new THREE.WireframeHelper(currentParams.mesh, currentParams.meshColor);
-		scene.add(currentParams.wireframe);
-		currentParams.wireframe.visible = false;
 	}
 }
 
