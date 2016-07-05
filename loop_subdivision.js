@@ -39,13 +39,21 @@ var paramControllers = {
 	subdivAmount: null,
 }
 
-var predefinedGeometries = {
-	tetrahedron: null,
-	cube: null,
-	sphere: null,
-	icosahedron: null,
-	dodecahedron: null,
-}
+var predefinedGeometriesNames = [
+	'tetrahedron',
+	'cube',
+	'sphere',
+	'icosahedron',
+	'dodecahedron',
+	// some more irregular shapes too
+	'plane',
+	'cone',
+	'ring',
+	'torus',
+	'torusKnot',
+];
+
+var predefinedGeometries = [];
 
 var currentParams = {
 	subdivAmount: -1,
@@ -351,7 +359,6 @@ var Subdivision = function(geometry) {
 			newIndexBuffer[offset + 11] = nv2;
 		}
 
-		console.log(newIndexBuffer);
 		retval.addAttribute('position', new THREE.BufferAttribute(newVertexBuffer, 3));
 		retval.setIndex(new THREE.BufferAttribute(newIndexBuffer, 1));
 
@@ -387,23 +394,7 @@ function changeMeshGeometry() {
 		params.subdivAmount = 0;
 		paramControllers.subdivAmount.updateDisplay();
 	}
-	switch (params.geometry) {
-		case 'tetrahedron':
-			currentParams.originalGeometry = predefinedGeometries.tetrahedron;
-			break;
-		case 'cube':
-			currentParams.originalGeometry = predefinedGeometries.cube;
-			break;
-		case 'sphere':
-			currentParams.originalGeometry = predefinedGeometries.sphere;
-			break;
-		case 'icosahedron':
-			currentParams.originalGeometry = predefinedGeometries.icosahedron;
-			break;
-		case 'dodecahedron':
-			currentParams.originalGeometry = predefinedGeometries.dodecahedron;
-			break;
-	}
+	currentParams.originalGeometry = predefinedGeometries[params.geometry];
 	currentParams.mesh.geometry = currentParams.originalGeometry;
 }
 
@@ -449,11 +440,17 @@ function changeMeshWireframe() {
 }
 
 function createPredefinedGeometries() {
-	predefinedGeometries.tetrahedron = new THREE.TetrahedronGeometry(1);
-	predefinedGeometries.cube = new THREE.BoxGeometry(1, 1, 1);
-	predefinedGeometries.sphere = new THREE.SphereGeometry(1, 4, 4);
-	predefinedGeometries.icosahedron = new THREE.IcosahedronGeometry(1);
-	predefinedGeometries.dodecahedron = new THREE.DodecahedronGeometry(1);
+	predefinedGeometries['tetrahedron'] = new THREE.TetrahedronGeometry(1);
+	predefinedGeometries['cube'] = new THREE.BoxGeometry(1, 1, 1);
+	predefinedGeometries['sphere'] = new THREE.SphereGeometry(1, 4, 4);
+	predefinedGeometries['icosahedron'] = new THREE.IcosahedronGeometry(1);
+	predefinedGeometries['dodecahedron'] = new THREE.DodecahedronGeometry(1);
+	// init the irregular shapes too
+	predefinedGeometries['plane'] = new THREE.PlaneGeometry(2, 2, 2, 2);
+	predefinedGeometries['cone'] = new THREE.ConeGeometry(1, 2, 8);
+	predefinedGeometries['ring'] = new THREE.RingGeometry(0.5, 1, 8, 2);
+	predefinedGeometries['torus'] = new THREE.TorusGeometry(1, 0.3333333);
+	predefinedGeometries['torusKnot'] = new THREE.TorusKnotGeometry(1, 0.2);
 }
 
 // WebGL initialization and implementation
@@ -509,7 +506,7 @@ function init() {
 	window.addEventListener( 'resize', onWindowResize, false );
 
 	gui = new dat.GUI();
-	gui.add(params, 'geometry', ['tetrahedron', 'cube', 'sphere', 'icosahedron', 'dodecahedron']).onChange(changeMeshGeometry);
+	gui.add(params, 'geometry', predefinedGeometriesNames).onChange(changeMeshGeometry);
 	gui.add(params, 'material', ['phongFlat', 'phongSmooth', 'lambert', 'normals', 'depth']).onChange(changeMeshMaterial);
 	gui.addColor(params, 'meshColor').name('color').onChange(changeMeshColor);
 	gui.add(params, 'wireframe').onChange(changeMeshWireframe);
