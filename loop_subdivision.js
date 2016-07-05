@@ -26,14 +26,17 @@ var startTime = Date.now();
 const epsilon = 1e-6;
 const subdivMax = 6;
 const uint16Max = 65535;
+const uint32Max = 4294967295;
 
 var params = {
 	geometry: 'tetrahedron',
 	material: 'phongFlat',
 	meshColor: '#0080ff',
-	wireColor: '#ffffff',
 	surface: true,
+	wireColor: '#ffffff',
 	wireframe: true,
+	originalColor: '#ff20ff',
+	original: true,
 	subdivAmount: 0,
 };
 
@@ -72,9 +75,12 @@ var currentParams = {
 	currentGeometry: null,
 	mesh: null,
 	wireMesh: null,
+	origMesh: null,
 	wireMat: null,
+	origMat: null,
 	meshColor: new THREE.Color(parseInt(params.meshColor.replace('#', '0x'))),
 	wireColor: new THREE.Color(parseInt(params.wireColor.replace('#', '0x'))),
+	originalColor: new THREE.Color(parseInt(params.originalColor.replace('#', '0x'))),
 	material: params.material,
 };
 
@@ -125,7 +131,7 @@ var EdgeMesh = function() {
 			edge.v[1] = maxV;
 			edge.f[0] = fi;
 			edge.ov[0] = ov;
-			edge.f[1] = uint16Max; // invalid value for connectivity checks later
+			edge.f[1] = uint32Max; // invalid value for connectivity checks later
 			edge.ov[1] = ov; // it will possibly be overwritten later, but should be the same as ov for correctness
 			edgeIndex = this.edges.length;
 			this.edges.push(edge);
@@ -183,7 +189,7 @@ var Subdivision = function(geometry) {
 			vertices[i * 3 + 1] = geometry.vertices[i].y;
 			vertices[i * 3 + 2] = geometry.vertices[i].z;
 		}
-		var indices = new Uint16Array(geometry.faces.length * 3);
+		var indices = new Uint32Array(geometry.faces.length * 3);
 		for (var i = 0, il = geometry.faces.length; i < il; ++i) {
 			indices[i * 3 + 0] = geometry.faces[i].a;
 			indices[i * 3 + 1] = geometry.faces[i].b;
@@ -338,7 +344,7 @@ var Subdivision = function(geometry) {
 		//  nv1  ov2  nv2
 		//  nv0  nv1  nv2
 		//
-		var newIndexBuffer = new Uint16Array(newFaceCount * 3);
+		var newIndexBuffer = new Uint32Array(newFaceCount * 3);
 		for (var i = 0; i < oldFaceCount; ++i) {
 			const ov0 = oldIndexBuffer[i * 3    ];
 			const ov1 = oldIndexBuffer[i * 3 + 1];
@@ -377,6 +383,11 @@ var Subdivision = function(geometry) {
 		delete edgeMesh;
 		retval.computeBoundingSphere();
 		retval.computeVertexNormals();
+		// for big geometries recompute the buffers
+		if (newVertCount > uint16Max) {
+			// not sure if this is working ATM
+			retval.computeOffsets();
+		}
 		return retval;
 	}
 
@@ -393,6 +404,8 @@ function subdivide(num) {
 		currentParams.currentGeometry = subdivGeom;
 		currentParams.mesh.geometry = currentParams.currentGeometry;
 		currentParams.wireMesh.geometry = currentParams.currentGeometry;
+		// change the visibility of the original mesh
+		currentParams.origMesh.visible = params.original && num > 0;
 	}
 }
 
@@ -408,6 +421,8 @@ function changeMeshGeometry() {
 		paramControllers.subdivAmount.updateDisplay();
 	}
 	currentParams.originalGeometry = predefinedGeometries[params.geometry];
+	currentParams.origMesh.geometry = currentParams.originalGeometry;
+	currentParams.origMesh.visible = false;
 	// create a new subdivider
 	subdivider = new Subdivision(currentParams.originalGeometry);
 	currentParams.currentGeometry = subdivider.subdivide(0);
@@ -436,6 +451,12 @@ function changeWireMeshColor() {
 	currentParams.wireMat.needsUpdate = true;
 }
 
+function changeOriginalColor() {
+	currentParams.originalColor = new THREE.Color(parseInt(params.originalColor.replace('#', '0x')));
+	currentParams.origMat.color = currentParams.originalColor;
+	currentParams.origMat.needsUpdate = true;
+}
+
 function changeMeshSurface() {
 	currentParams.mesh.visible = params.surface;
 }
@@ -444,7 +465,11 @@ function changeMeshWireframe() {
 	currentParams.wireMesh.visible = params.wireframe;
 }
 
-function createDefaultGeomrty() {
+function changeMeshOriginal() {
+	currentParams.origMesh.visible = params.original && currentParams.subdivAmount > 0;
+}
+
+function createDefaultGeometry() {
 	currentParams.originalGeometry = predefinedGeometries[params.geometry];
 	subdivider = new Subdivision(currentParams.originalGeometry);
 	currentParams.currentGeometry = subdivider.subdivide(0);
@@ -459,6 +484,13 @@ function createDefaultGeomrty() {
 		currentParams.wireMat
 	);
 	scene.add(currentParams.wireMesh);
+	// create the original mesh
+	currentParams.origMesh = new THREE.Mesh(
+		currentParams.originalGeometry,
+		currentParams.origMat
+	);
+	currentParams.origMesh.visible = false;
+	scene.add(currentParams.origMesh);
 }
 
 function createPredefinedGeometries() {
@@ -490,6 +522,10 @@ function createMaterials() {
 	// create the wireframe material
 	currentParams.wireMat = new THREE.MeshBasicMaterial({
 		color: currentParams.wireColor,
+		wireframe: true
+	});
+	currentParams.origMat = new THREE.MeshBasicMaterial({
+		color: currentParams.originalColor,
 		wireframe: true
 	});
 }
@@ -548,16 +584,18 @@ function init() {
 
 	gui = new dat.GUI();
 	gui.add(params, 'geometry', predefinedGeometriesNames).onChange(changeMeshGeometry);
+	paramControllers.subdivAmount = gui.add(params, 'subdivAmount', 0, subdivMax).step(1).onChange(subdivide);
 	gui.add(params, 'material', materialNames).onChange(changeMeshMaterial);
 	gui.addColor(params, 'meshColor').name('color').onChange(changeMeshColor);
 	gui.add(params, 'surface').onChange(changeMeshSurface);
 	gui.addColor(params, 'wireColor').name('wire color').onChange(changeWireMeshColor);
 	gui.add(params, 'wireframe').onChange(changeMeshWireframe);
-	paramControllers.subdivAmount = gui.add(params, 'subdivAmount', 0, subdivMax).step(1).onChange(subdivide);
+	gui.addColor(params, 'originalColor').name('original color').onChange(changeOriginalColor);
+	gui.add(params, 'original').onChange(changeMeshOriginal);
 
 	createPredefinedGeometries();
 	createMaterials();
-	createDefaultGeomrty();
+	createDefaultGeometry();
 
 	updateScene();
 
