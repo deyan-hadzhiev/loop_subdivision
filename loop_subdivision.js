@@ -26,13 +26,23 @@ var startTime = Date.now();
 const epsilon = 1e-6;
 
 var params = {
+	geometry: 'tetrahedron',
 	material: 'phong',
 	meshColor: '#0080ff',
 	wireframe: false,
 	smooth: true
 };
 
+var predefinedGeometries = {
+	tetrahedron: null,
+	cube: null,
+	sphere: null,
+	icosahedron: null,
+	dodecahedron: null,
+}
+
 var currentParams = {
+	originalGeometry: null,
 	mesh: null,
 	meshColor: new THREE.Color(parseInt(params.meshColor.replace('#', '0x'))),
 	phongMat: null,
@@ -42,6 +52,30 @@ var currentParams = {
 };
 
 // Subdivision
+
+
+// Change events
+
+function changeMeshGeometry() {
+	switch (params.geometry) {
+		case 'tetrahedron':
+			currentParams.originalGeometry = predefinedGeometries.tetrahedron;
+			break;
+		case 'cube':
+			currentParams.originalGeometry = predefinedGeometries.cube;
+			break;
+		case 'sphere':
+			currentParams.originalGeometry = predefinedGeometries.sphere;
+			break;
+		case 'icosahedron':
+			currentParams.originalGeometry = predefinedGeometries.icosahedron;
+			break;
+		case 'dodecahedron':
+			currentParams.originalGeometry = predefinedGeometries.dodecahedron;
+			break;
+	}
+	currentParams.mesh.geometry = currentParams.originalGeometry;
+}
 
 function changeMeshMaterial() {
 	switch (params.material) {
@@ -81,6 +115,14 @@ function changeMeshWireframe() {
 function changeMeshShading() {
 	currentParams.phongMat.shading = (params.smooth ? THREE.SmoothShading : THREE.FlatShading);
 	currentParams.phongMat.needsUpdate = true;
+}
+
+function createPredefinedGeometries() {
+	predefinedGeometries.tetrahedron = new THREE.TetrahedronGeometry(1);
+	predefinedGeometries.cube = new THREE.BoxGeometry(1, 1, 1);
+	predefinedGeometries.sphere = new THREE.SphereGeometry(1, 4, 4);
+	predefinedGeometries.icosahedron = new THREE.IcosahedronGeometry(1);
+	predefinedGeometries.dodecahedron = new THREE.DodecahedronGeometry(1);
 }
 
 // WebGL initialization and implementation
@@ -136,10 +178,13 @@ function init() {
 	window.addEventListener( 'resize', onWindowResize, false );
 
 	gui = new dat.GUI();
+	gui.add(params, 'geometry', ['tetrahedron', 'cube', 'sphere', 'icosahedron', 'dodecahedron']).onChange(changeMeshGeometry);
 	gui.add(params, 'material', ['phong', 'lambert', 'normals', 'depth']).onChange(changeMeshMaterial);
 	gui.addColor(params, 'meshColor').name('color').onChange(changeMeshColor);
 	gui.add(params, 'wireframe').onChange(changeMeshWireframe);
 	gui.add(params, 'smooth').onChange(changeMeshShading);
+
+	createPredefinedGeometries();
 
 	updateScene();
 
@@ -150,10 +195,10 @@ function init() {
 
 function updateScene() {
 	if (!currentParams.mesh) {
+		currentParams.originalGeometry = predefinedGeometries.tetrahedron;
 		currentParams.lambertMat = new THREE.MeshLambertMaterial({color: currentParams.meshColor}),
 		currentParams.mesh = new THREE.Mesh(
-			new THREE.CubeGeometry(2, 2, 2),
-			//new THREE.SphereGeometry(1, 20, 20),
+			currentParams.originalGeometry,
 			currentParams.lambertMat
 		);
 		currentParams.phongMat = new THREE.MeshPhongMaterial({
