@@ -134,6 +134,19 @@ var EdgeMesh = function() {
 	}
 }
 
+var BetaValencyCache = function(maxValency) {
+	this.cache = new Float32Array(maxValency + 1);
+	this.cache[0] = 0.0;
+	this.cache[1] = 0.0;
+	this.cache[2] = 0.0;
+	this.cache[3] = 3.0 / 16.0;
+	for (var i = 4; i < maxValency + 1; ++i) {
+		this.cache[i] = (1.0 / i) * (5.0 / 8.0 - Math.pow( 3.0 / 8.0 + (1.0 / 4.0) * Math.cos( 2.0 * Math.PI / i ), 2.0));
+		// Warren's modified formula:
+		// this.cache[i] = 3.0 / (8.0 * i);
+	}
+}
+
 var subdivider = null;
 
 var Subdivision = function(geometry) {
@@ -211,6 +224,16 @@ var Subdivision = function(geometry) {
 		// So moving the variables around we get:
 		//  V = E - F + Chi;
 		const newVertCount = newEdgeCount - newFaceCount + Chi;
+
+		// compute appropriate beta valency cache for extraordinary points (with valency not exactly 6)
+		var maxValency = -1;
+		for (var vi = 0; vi < oldVertCount; ++vi) {
+			maxValency = Math.max(maxValency, edgeMesh.vertices[vi].e.length);
+		}
+		if (2 >= maxValency) {
+			throw Error('This is no mesh at all');
+		}
+		var betaValCache = new BetaValencyCache(maxValency);
 
 		// TODO
 
