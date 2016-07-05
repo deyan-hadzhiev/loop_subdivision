@@ -55,16 +55,21 @@ var predefinedGeometriesNames = [
 
 var predefinedGeometries = [];
 
+var materialNames = [
+	'phongFlat',
+	'phongSmooth',
+	'lambert',
+	'normal',
+];
+
+var materials = [];
+
 var currentParams = {
 	subdivAmount: -1,
 	originalGeometry: null,
 	mesh: null,
 	meshColor: new THREE.Color(parseInt(params.meshColor.replace('#', '0x'))),
-	phongMatFlat: null,
-	phongMatSmooth: null,
-	lambertMat: null,
-	normalMat: new THREE.MeshNormalMaterial(),
-	depthMat: new THREE.MeshDepthMaterial(),
+
 };
 
 // Subdivision
@@ -399,58 +404,51 @@ function changeMeshGeometry() {
 }
 
 function changeMeshMaterial() {
-	switch (params.material) {
-		case 'phongFlat':
-			currentParams.mesh.material = currentParams.phongMatFlat;
-			break;
-		case 'phongSmooth':
-			currentParams.mesh.material = currentParams.phongMatSmooth;
-			break;
-		case 'lambert':
-			currentParams.mesh.material = currentParams.lambertMat;
-			break;
-		case 'normals':
-			currentParams.mesh.material = currentParams.normalMat;
-			break;
-		case 'depth':
-			currentParams.mesh.material = currentParams.depthMat;
-			break;
-		default:
-			currentParams.mesh.material = currentParams.lambertMat;
-			break;
-	}
+	currentParams.mesh.material = materials[params.material];
 	currentParams.mesh.material.needsUpdate = true;
 }
 
 function changeMeshColor() {
 	if (currentParams.mesh) {
 		currentParams.meshColor = new THREE.Color(parseInt(params.meshColor.replace('#', '0x')));
-		currentParams.phongMatFlat.color = currentParams.meshColor;
-		currentParams.phongMatSmooth.color = currentParams.meshColor;
-		currentParams.lambertMat.color = currentParams.meshColor;
+		materials['phongFlat'].color = currentParams.meshColor;
+		materials['phongSmooth'].color = currentParams.meshColor;
+		materials['lambert'].color = currentParams.meshColor;
 	}
 }
 
 function changeMeshWireframe() {
-	currentParams.phongMatFlat.wireframe = params.wireframe;
-	currentParams.phongMatSmooth.wireframe = params.wireframe;
-	currentParams.lambertMat.wireframe = params.wireframe;
-	currentParams.normalMat.wireframe = params.wireframe;
-	currentParams.depthMat.wireframe = params.wireframe;
+	materialNames.forEach(function(matName){
+		materials[matName].wireframe = params.wireframe;
+	});
 }
 
 function createPredefinedGeometries() {
-	predefinedGeometries['tetrahedron'] = new THREE.TetrahedronGeometry(1);
-	predefinedGeometries['cube'] = new THREE.BoxGeometry(1, 1, 1);
-	predefinedGeometries['sphere'] = new THREE.SphereGeometry(1, 4, 4);
-	predefinedGeometries['icosahedron'] = new THREE.IcosahedronGeometry(1);
-	predefinedGeometries['dodecahedron'] = new THREE.DodecahedronGeometry(1);
+	predefinedGeometries['tetrahedron'] = new THREE.TetrahedronGeometry(4);
+	predefinedGeometries['cube'] = new THREE.BoxGeometry(4, 4, 4);
+	predefinedGeometries['sphere'] = new THREE.SphereGeometry(4, 4, 4);
+	predefinedGeometries['icosahedron'] = new THREE.IcosahedronGeometry(4);
+	predefinedGeometries['dodecahedron'] = new THREE.DodecahedronGeometry(4);
 	// init the irregular shapes too
-	predefinedGeometries['plane'] = new THREE.PlaneGeometry(2, 2, 2, 2);
-	predefinedGeometries['cone'] = new THREE.ConeGeometry(1, 2, 8);
-	predefinedGeometries['ring'] = new THREE.RingGeometry(0.5, 1, 8, 2);
-	predefinedGeometries['torus'] = new THREE.TorusGeometry(1, 0.3333333);
-	predefinedGeometries['torusKnot'] = new THREE.TorusKnotGeometry(1, 0.2);
+	predefinedGeometries['plane'] = new THREE.PlaneGeometry(8, 2, 2, 2);
+	predefinedGeometries['cone'] = new THREE.ConeGeometry(4, 8, 8);
+	predefinedGeometries['ring'] = new THREE.RingGeometry(2, 4, 8, 2);
+	predefinedGeometries['torus'] = new THREE.TorusGeometry(4, 1);
+	predefinedGeometries['torusKnot'] = new THREE.TorusKnotGeometry(4, 0.8);
+}
+
+function createMaterials() {
+	var commonPhongParams = {
+		color: currentParams.meshColor,
+		shininess: 40,
+		specular: 0x222222
+	};
+	materials['phongFlat'] = new THREE.MeshPhongMaterial(commonPhongParams);
+	materials['phongFlat'].shading = THREE.FlatShading;
+	materials['phongSmooth'] = new THREE.MeshPhongMaterial(commonPhongParams);
+	materials['phongSmooth'].shading = THREE.SmoothShading;
+	materials['lambert'] = new THREE.MeshLambertMaterial({color: currentParams.meshColor});
+	materials['normal'] = new THREE.MeshNormalMaterial();
 }
 
 // WebGL initialization and implementation
@@ -472,7 +470,7 @@ function init() {
 	controls.zoomSpeed = 2.0;
 	controls.target = new THREE.Vector3(0, 0, 0);
 
-	camera.position.x = 5;
+	camera.position.x = 9;
 
 	// world
 	scene = new THREE.Scene();
@@ -507,12 +505,13 @@ function init() {
 
 	gui = new dat.GUI();
 	gui.add(params, 'geometry', predefinedGeometriesNames).onChange(changeMeshGeometry);
-	gui.add(params, 'material', ['phongFlat', 'phongSmooth', 'lambert', 'normals', 'depth']).onChange(changeMeshMaterial);
+	gui.add(params, 'material', materialNames).onChange(changeMeshMaterial);
 	gui.addColor(params, 'meshColor').name('color').onChange(changeMeshColor);
 	gui.add(params, 'wireframe').onChange(changeMeshWireframe);
 	paramControllers.subdivAmount = gui.add(params, 'subdivAmount', 0, subdivMax).step(1).onChange(subdivide);
 
 	createPredefinedGeometries();
+	createMaterials();
 
 	updateScene();
 
@@ -524,16 +523,6 @@ function init() {
 function updateScene() {
 	if (!currentParams.mesh) {
 		currentParams.originalGeometry = predefinedGeometries.tetrahedron;
-		currentParams.lambertMat = new THREE.MeshLambertMaterial({color: currentParams.meshColor});
-		var commonPhongParams = {
-			color: currentParams.meshColor,
-			shininess: 40,
-			specular: 0x222222
-		};
-		currentParams.phongMatFlat = new THREE.MeshPhongMaterial(commonPhongParams);
-		currentParams.phongMatFlat.shading = THREE.FlatShading;
-		currentParams.phongMatSmooth = new THREE.MeshPhongMaterial(commonPhongParams);
-		currentParams.phongMatSmooth.shading = THREE.SmoothShading;
 		currentParams.mesh = new THREE.Mesh(
 			currentParams.originalGeometry
 		);
