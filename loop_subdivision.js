@@ -25,6 +25,7 @@ var startTime = Date.now();
 // some constants
 const epsilon = 1e-6;
 const subdivMax = 6;
+const uint16Max = 65535;
 
 var params = {
 	geometry: 'tetrahedron',
@@ -72,6 +73,9 @@ var EMEdge = function() {
 	this.v = new Uint32Array(2);
 	this.f = new Uint32Array(2);
 	this.ov = new Uint32Array(2); //!< holds the opposite vertices for each of the faces
+	this.getOpposite = function(vi) {
+		return (this.v[0] == vi ? this.v[1] : this.v[0]);
+	}
 }
 
 var EdgeMesh = function() {
@@ -102,6 +106,8 @@ var EdgeMesh = function() {
 			edge.v[1] = maxV;
 			edge.f[0] = fi;
 			edge.ov[0] = ov;
+			edge.f[1] = uint16Max; // invalid value for connectivity checks later
+			edge.ov[1] = ov; // it will possibly be overwritten later, but should be the same as ov for correctness
 			edgeIndex = this.edges.length;
 			this.edges.push(edge);
 			// add the edge to the vertices
@@ -138,7 +144,7 @@ var BetaValencyCache = function(maxValency) {
 	this.cache = new Float32Array(maxValency + 1);
 	this.cache[0] = 0.0;
 	this.cache[1] = 0.0;
-	this.cache[2] = 0.0;
+	this.cache[2] = 1.0 / 8.0;
 	this.cache[3] = 3.0 / 16.0;
 	for (var i = 4; i < maxValency + 1; ++i) {
 		this.cache[i] = (1.0 / i) * (5.0 / 8.0 - Math.pow( 3.0 / 8.0 + (1.0 / 4.0) * Math.cos( 2.0 * Math.PI / i ), 2.0));
@@ -196,10 +202,10 @@ var Subdivision = function(geometry) {
 
 	this.subdivideGeometry = function subdivideGeometry(buffGeom) {
 		var retval = new THREE.BufferGeometry();
-		var oldVertices = buffGeom.getAttribute('position').array;
-		var oldIndices = buffGeom.getIndex().array;
+		var oldVertexBuffer = buffGeom.getAttribute('position').array;
+		var oldIndexBuffer = buffGeom.getIndex().array;
 		var edgeMesh = new EdgeMesh;
-		edgeMesh.generate(oldVertices, oldIndices);
+		edgeMesh.generate(oldVertexBuffer, oldIndexBuffer);
 		const oldVertCount = edgeMesh.vertices.length;
 		const oldEdgeCount = edgeMesh.edges.length;
 		const oldFaceCount = edgeMesh.faces.length;
@@ -212,11 +218,11 @@ var Subdivision = function(geometry) {
 		// faces and edges - each subdivided faces generates 3 new edges and each subdivided edge
 		// generates 2 new edges
 		//
-		//  *---*---*
+		//  o---o---o
 		//   \ / \ /
-		//    *---*
+		//    o---o
 		//     \ /
-		//      *
+		//      o
 		//
 		const Chi = oldVertCount - oldEdgeCount + oldFaceCount;
 		const newEdgeCount = oldEdgeCount * 2 + oldFaceCount * 3;
@@ -235,8 +241,122 @@ var Subdivision = function(geometry) {
 		}
 		var betaValCache = new BetaValencyCache(maxValency);
 
-		// TODO
+		// allocate new vertices array
+		var newVertexBuffer = new Float32Array(newVertCount * 3);
 
+		// start the actual subdivision
+
+		//  Step 1 - calculate new vetices from old verices
+		for (var i = 0; i < oldVertCount; ++i) {
+			// save the valency of the vertex, we'll reuse it
+			const vertexValency = edgeMesh.vertices[i].e.length;
+			// get the appropriate beta value for the vertex
+			const beta = betaValCache.cache[vertexValency];
+			const vertexWeightBeta = 1.0 - vertexValency * beta;
+
+			// use the values directly
+			// first add the original x, y and z with the vertex weight
+			var x = vertexWeightBeta * oldVertexBuffer[i * 3    ];
+			var y = vertexWeightBeta * oldVertexBuffer[i * 3 + 1];
+			var z = vertexWeightBeta * oldVertexBuffer[i * 3 + 2];
+			// then for each connected edge add the other vertice too
+			for (var j = 0; j < vertexValency; ++j) {
+				const oppositeIndex = edgeMesh.edges[edgeMesh.vertices[i].e[j]].getOpposite(i);
+				x += beta * oldVertexBuffer[oppositeIndex * 3    ];
+				y += beta * oldVertexBuffer[oppositeIndex * 3 + 1];
+				z += beta * oldVertexBuffer[oppositeIndex * 3 + 2];
+			}
+			// set the new vertice values
+			newVertexBuffer[i * 3    ] = x;
+			newVertexBuffer[i * 3 + 1] = y;
+			newVertexBuffer[i * 3 + 2] = z;
+		}
+
+		// Step 2 - calculate new vertices from edge subdivision
+		// the subdivision scheme is the following
+		//     1/8
+		//     / \
+		//    /   \
+		//   /     \
+		// 3/8 --- 3/8
+		//   \     /
+		//    \   /
+		//     \ /
+		//     1/8
+		for (var i = 0; i < oldEdgeCount; ++i) {
+			const ev0 = edgeMesh.edges[i].v[0];
+			const ev1 = edgeMesh.edges[i].v[1];
+			const fv0 = edgeMesh.edges[i].ov[0];
+			const fv1 = edgeMesh.edges[i].ov[1];
+			var x = (3.0 / 8.0) * (oldVertexBuffer[ev0 * 3    ] + oldVertexBuffer[ev1 * 3    ]);
+			var y = (3.0 / 8.0) * (oldVertexBuffer[ev0 * 3 + 1] + oldVertexBuffer[ev1 * 3 + 1]);
+			var z = (3.0 / 8.0) * (oldVertexBuffer[ev0 * 3 + 2] + oldVertexBuffer[ev1 * 3 + 2]);
+			x += (1.0 / 8.0) * (oldVertexBuffer[fv0 * 3    ] + oldVertexBuffer[fv1 * 3    ]);
+			y += (1.0 / 8.0) * (oldVertexBuffer[fv0 * 3 + 1] + oldVertexBuffer[fv1 * 3 + 1]);
+			z += (1.0 / 8.0) * (oldVertexBuffer[fv0 * 3 + 2] + oldVertexBuffer[fv1 * 3 + 2]);
+			// new vertex index
+			const nvi = oldVertCount + i;
+			// set the new vertice values
+			newVertexBuffer[nvi * 3    ] = x;
+			newVertexBuffer[nvi * 3 + 1] = y;
+			newVertexBuffer[nvi * 3 + 2] = z;
+		}
+
+		// Step 3 - calculate new indexes based on subdivision
+		// ov2 --- nv1 --- ov1
+		//   \     / \     /
+		//    \   /   \   /
+		//     \ /     \ /
+		//     nv2 --- nv0
+		//       \     /
+		//        \   /
+		//         \ /
+		//         ov0
+		// note: ov == old vertex; nv == new vertex
+		// so the new indices are taken like this (each line is a new face)
+		//  ov0  nv0  nv2
+		//  nv0  ov1  nv1
+		//  nv1  ov2  nv2
+		//  nv0  nv1  nv2
+		//
+		var newIndexBuffer = new Uint16Array(newFaceCount * 3);
+		for (var i = 0; i < oldFaceCount; ++i) {
+			const ov0 = oldIndexBuffer[i * 3    ];
+			const ov1 = oldIndexBuffer[i * 3 + 1];
+			const ov2 = oldIndexBuffer[i * 3 + 2];
+			// the new vertex indexes are obtained by the edge mesh's faces
+			// since they hold indexes to edges - that is the same order in
+			// which the new vertices are constructed in the new vertex buffer
+			// so we need only the index and add the offset of the old vertices count
+			const nv0 = oldVertCount + edgeMesh.faces[i].e[0];
+			const nv1 = oldVertCount + edgeMesh.faces[i].e[1];
+			const nv2 = oldVertCount + edgeMesh.faces[i].e[2];
+			// now add the new vertices to the buffer
+			const offset = i * 12; // 4 * 3
+
+			newIndexBuffer[offset     ] = ov0;
+			newIndexBuffer[offset +  1] = nv0;
+			newIndexBuffer[offset +  2] = nv2;
+
+			newIndexBuffer[offset +  3] = nv0;
+			newIndexBuffer[offset +  4] = ov1;
+			newIndexBuffer[offset +  5] = nv1;
+
+			newIndexBuffer[offset +  6] = nv1;
+			newIndexBuffer[offset +  7] = ov2;
+			newIndexBuffer[offset +  8] = nv2;
+
+			newIndexBuffer[offset +  9] = nv0;
+			newIndexBuffer[offset + 10] = nv1;
+			newIndexBuffer[offset + 11] = nv2;
+		}
+
+		console.log(newIndexBuffer);
+		retval.addAttribute('position', new THREE.BufferAttribute(newVertexBuffer, 3));
+		retval.setIndex(new THREE.BufferAttribute(newIndexBuffer, 1));
+
+		// deallocate the edge mesh
+		delete edgeMesh;
 		retval.computeBoundingSphere();
 		retval.computeVertexNormals();
 		return retval;
