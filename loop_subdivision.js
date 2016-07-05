@@ -31,7 +31,9 @@ var params = {
 	geometry: 'tetrahedron',
 	material: 'phongFlat',
 	meshColor: '#0080ff',
-	wireframe: false,
+	wireColor: '#ffffff',
+	surface: true,
+	wireframe: true,
 	subdivAmount: 0,
 };
 
@@ -67,9 +69,13 @@ var materials = [];
 var currentParams = {
 	subdivAmount: -1,
 	originalGeometry: null,
+	currentGeometry: null,
 	mesh: null,
+	wireMesh: null,
+	wireMat: null,
 	meshColor: new THREE.Color(parseInt(params.meshColor.replace('#', '0x'))),
-
+	wireColor: new THREE.Color(parseInt(params.wireColor.replace('#', '0x'))),
+	material: params.material,
 };
 
 // Subdivision
@@ -315,7 +321,7 @@ var Subdivision = function(geometry) {
 			newVertexBuffer[nvi * 3 + 2] = z;
 		}
 
-		// Step 3 - calculate new indexes based on subdivision
+		// Step 3 - calculate new indices based on subdivision
 		// ov2 --- nv1 --- ov1
 		//   \     / \     /
 		//    \   /   \   /
@@ -337,8 +343,8 @@ var Subdivision = function(geometry) {
 			const ov0 = oldIndexBuffer[i * 3    ];
 			const ov1 = oldIndexBuffer[i * 3 + 1];
 			const ov2 = oldIndexBuffer[i * 3 + 2];
-			// the new vertex indexes are obtained by the edge mesh's faces
-			// since they hold indexes to edges - that is the same order in
+			// the new vertex indices are obtained by the edge mesh's faces
+			// since they hold indices to edges - that is the same order in
 			// which the new vertices are constructed in the new vertex buffer
 			// so we need only the index and add the offset of the old vertices count
 			const nv0 = oldVertCount + edgeMesh.faces[i].e[0];
@@ -384,7 +390,9 @@ function subdivide(num) {
 	if (num != currentParams.subdivAmount) {
 		currentParams.subdivAmount = num;
 		var subdivGeom = subdivider.subdivide(num)
-		currentParams.mesh.geometry = subdivGeom;
+		currentParams.currentGeometry = subdivGeom;
+		currentParams.mesh.geometry = currentParams.currentGeometry;
+		currentParams.wireMesh.geometry = currentParams.currentGeometry;
 	}
 }
 
@@ -400,27 +408,57 @@ function changeMeshGeometry() {
 		paramControllers.subdivAmount.updateDisplay();
 	}
 	currentParams.originalGeometry = predefinedGeometries[params.geometry];
-	currentParams.mesh.geometry = currentParams.originalGeometry;
+	// create a new subdivider
+	subdivider = new Subdivision(currentParams.originalGeometry);
+	currentParams.currentGeometry = subdivider.subdivide(0);
+	currentParams.subdivAmount = 0;
+	currentParams.mesh.geometry = currentParams.currentGeometry;
+	currentParams.wireMesh.geometry = currentParams.currentGeometry;
 }
 
 function changeMeshMaterial() {
 	currentParams.mesh.material = materials[params.material];
+	currentParams.material = params.material;
 	currentParams.mesh.material.needsUpdate = true;
 }
 
 function changeMeshColor() {
-	if (currentParams.mesh) {
-		currentParams.meshColor = new THREE.Color(parseInt(params.meshColor.replace('#', '0x')));
-		materials['phongFlat'].color = currentParams.meshColor;
-		materials['phongSmooth'].color = currentParams.meshColor;
-		materials['lambert'].color = currentParams.meshColor;
-	}
+	currentParams.meshColor = new THREE.Color(parseInt(params.meshColor.replace('#', '0x')));
+	materials['phongFlat'].color = currentParams.meshColor;
+	materials['phongSmooth'].color = currentParams.meshColor;
+	materials['lambert'].color = currentParams.meshColor;
+	currentParams.mesh.material.needsUpdate = true;
+}
+
+function changeWireMeshColor() {
+	currentParams.wireColor = new THREE.Color(parseInt(params.wireColor.replace('#', '0x')));
+	currentParams.wireMat.color = currentParams.wireColor;
+	currentParams.wireMat.needsUpdate = true;
+}
+
+function changeMeshSurface() {
+	currentParams.mesh.visible = params.surface;
 }
 
 function changeMeshWireframe() {
-	materialNames.forEach(function(matName){
-		materials[matName].wireframe = params.wireframe;
-	});
+	currentParams.wireMesh.visible = params.wireframe;
+}
+
+function createDefaultGeomrty() {
+	currentParams.originalGeometry = predefinedGeometries[params.geometry];
+	subdivider = new Subdivision(currentParams.originalGeometry);
+	currentParams.currentGeometry = subdivider.subdivide(0);
+	currentParams.mesh = new THREE.Mesh(
+		currentParams.currentGeometry
+	);
+	changeMeshMaterial();
+	scene.add(currentParams.mesh);
+	// create the wireframe mesh
+	currentParams.wireMesh = new THREE.Mesh(
+		currentParams.currentGeometry,
+		currentParams.wireMat
+	);
+	scene.add(currentParams.wireMesh);
 }
 
 function createPredefinedGeometries() {
@@ -449,6 +487,11 @@ function createMaterials() {
 	materials['phongSmooth'].shading = THREE.SmoothShading;
 	materials['lambert'] = new THREE.MeshLambertMaterial({color: currentParams.meshColor});
 	materials['normal'] = new THREE.MeshNormalMaterial();
+	// create the wireframe material
+	currentParams.wireMat = new THREE.MeshBasicMaterial({
+		color: currentParams.wireColor,
+		wireframe: true
+	});
 }
 
 // WebGL initialization and implementation
@@ -507,11 +550,14 @@ function init() {
 	gui.add(params, 'geometry', predefinedGeometriesNames).onChange(changeMeshGeometry);
 	gui.add(params, 'material', materialNames).onChange(changeMeshMaterial);
 	gui.addColor(params, 'meshColor').name('color').onChange(changeMeshColor);
+	gui.add(params, 'surface').onChange(changeMeshSurface);
+	gui.addColor(params, 'wireColor').name('wire color').onChange(changeWireMeshColor);
 	gui.add(params, 'wireframe').onChange(changeMeshWireframe);
 	paramControllers.subdivAmount = gui.add(params, 'subdivAmount', 0, subdivMax).step(1).onChange(subdivide);
 
 	createPredefinedGeometries();
 	createMaterials();
+	createDefaultGeomrty();
 
 	updateScene();
 
@@ -521,14 +567,8 @@ function init() {
 }
 
 function updateScene() {
-	if (!currentParams.mesh) {
-		currentParams.originalGeometry = predefinedGeometries.tetrahedron;
-		currentParams.mesh = new THREE.Mesh(
-			currentParams.originalGeometry
-		);
-		changeMeshMaterial();
-		scene.add(currentParams.mesh);
-	}
+	// TODO
+	var dTime = Date.now() - startTime;
 }
 
 // GUI
@@ -553,7 +593,6 @@ function onWindowResize() {
 }
 
 function render() {
-	var dTime = Date.now() - startTime;
 	updateScene();
 	renderer.render( scene, camera );
 	stats.update();
