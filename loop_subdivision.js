@@ -24,14 +24,20 @@ var startTime = Date.now();
 
 // some constants
 const epsilon = 1e-6;
+const subdivMax = 6;
 
 var params = {
 	geometry: 'tetrahedron',
 	material: 'phong',
 	meshColor: '#0080ff',
 	wireframe: false,
-	smooth: true
+	smooth: true,
+	subdivAmount: 0,
 };
+
+var paramControllers = {
+	subdivAmount: null,
+}
 
 var predefinedGeometries = {
 	tetrahedron: null,
@@ -42,6 +48,7 @@ var predefinedGeometries = {
 }
 
 var currentParams = {
+	subdivAmount: -1,
 	originalGeometry: null,
 	mesh: null,
 	meshColor: new THREE.Color(parseInt(params.meshColor.replace('#', '0x'))),
@@ -53,10 +60,95 @@ var currentParams = {
 
 // Subdivision
 
+var subdivider = null;
+
+var Subdivision = function(geometry) {
+	if (geometry instanceof THREE.Geometry) {
+		this.initialGeometry = new THREE.BufferGeometry();
+		var vertices = new Float32Array(geometry.vertices.length * 3);
+		for (var i = 0, il = geometry.vertices.length; i < il; ++i) {
+			vertices[i * 3 + 0] = geometry.vertices[i].x;
+			vertices[i * 3 + 1] = geometry.vertices[i].y;
+			vertices[i * 3 + 2] = geometry.vertices[i].z;
+		}
+		var indices = new Uint16Array(geometry.faces.length * 3);
+		for (var i = 0, il = geometry.faces.length; i < il; ++i) {
+			indices[i * 3 + 0] = geometry.faces[i].a;
+			indices[i * 3 + 1] = geometry.faces[i].b;
+			indices[i * 3 + 2] = geometry.faces[i].c;
+		}
+		this.initialGeometry.addAttribute('position', new THREE.BufferAttribute(vertices, 3));
+		this.initialGeometry.setIndex(new THREE.BufferAttribute(indices, 1));
+		this.initialGeometry.computeVertexNormals();
+	} else {
+		this.initialGeometry = new THREE.BufferGeometry().copy(geometry);
+	}
+	this.initialGeometry.computeBoundingSphere();
+	this.cachedSubdivisions = [];
+
+	// functions
+	this.dispose = function dispose() {
+		this.initialGeometry.dispose();
+		for (var i = 0, il = this.cachedSubdivisions.length; i < il; ++i) {
+			this.cachedSubdivisions[i].dispose();
+		}
+	}
+
+	this.subdivide = function subdivide(num) {
+		if (num == 0) {
+			return this.initialGeometry;
+		} else if (this.cachedSubdivisions[num - 1]) {
+			return this.cachedSubdivisions[num - 1];
+		} else {
+			var previousSubdiv = this.subdivide(num - 1);
+			var subdivided = this.subdivideGeometry(previousSubdiv);
+			this.cachedSubdivisions[num - 1] = subdivided;
+			return subdivided;
+		}
+	}
+
+	this.subdivideGeometry = function subdivideGeometry(buffGeom) {
+		var retval = new THREE.BufferGeometry();
+		// TODO : real implementation
+		var oldVertices = buffGeom.getAttribute('position').array;
+		var newVertices = new Float32Array(oldVertices.length);
+		for (var i = 0, il = oldVertices.length; i < il; ++i) {
+			newVertices[i] = oldVertices[i] * 1.2;
+		}
+		retval.addAttribute('position', new THREE.BufferAttribute(newVertices, 3));
+		// copy the indices directly
+		var newIndices = new Uint16Array(buffGeom.getIndex('index').array);
+		retval.setIndex(new THREE.BufferAttribute(newIndices, 1));
+		retval.computeBoundingSphere();
+		retval.computeVertexNormals();
+		return retval;
+	}
+
+	this.computeNormals
+}
+
+function subdivide(num) {
+	if (!subdivider) {
+		subdivider = new Subdivision(currentParams.originalGeometry);
+	}
+	if (num != currentParams.subdivAmount) {
+		currentParams.subdivAmount = num;
+		var subdivGeom = subdivider.subdivide(num)
+		currentParams.mesh.geometry = subdivGeom;
+	}
+}
 
 // Change events
 
 function changeMeshGeometry() {
+	if (subdivider) {
+		subdivider.dispose();
+		delete subdivider;
+		subdivider = null;
+		currentParams.subdivAmount = -1;
+		params.subdivAmount = 0;
+		paramControllers.subdivAmount.updateDisplay();
+	}
 	switch (params.geometry) {
 		case 'tetrahedron':
 			currentParams.originalGeometry = predefinedGeometries.tetrahedron;
@@ -95,6 +187,7 @@ function changeMeshMaterial() {
 			currentParams.mesh.material = currentParams.lambertMat;
 			break;
 	}
+	currentParams.mesh.material.needsUpdate = true;
 }
 
 function changeMeshColor() {
@@ -183,6 +276,7 @@ function init() {
 	gui.addColor(params, 'meshColor').name('color').onChange(changeMeshColor);
 	gui.add(params, 'wireframe').onChange(changeMeshWireframe);
 	gui.add(params, 'smooth').onChange(changeMeshShading);
+	paramControllers.subdivAmount = gui.add(params, 'subdivAmount', 0, subdivMax).step(1).onChange(subdivide);
 
 	createPredefinedGeometries();
 
