@@ -60,6 +60,80 @@ var currentParams = {
 
 // Subdivision
 
+var EMFace = function() {
+	this.e = new Uint32Array(3);
+}
+
+var EMVertex = function() {
+	this.e = [];
+}
+
+var EMEdge = function() {
+	this.v = new Uint32Array(2);
+	this.f = new Uint32Array(2);
+	this.ov = new Uint32Array(2); //!< holds the opposite vertices for each of the faces
+}
+
+var EdgeMesh = function() {
+	this.faces = [];
+	this.vertices = [];
+	this.edges = [];
+
+	// v0 - index of the first vertex
+	// v1 - index of the second vertex
+	// fi - index of the face
+	// ei - index of the edge in the face
+	// ov - opposite vertex of the edge for the current face
+	this.processEdge = function(v0, v1, fi, ei, ov) {
+		const minV = Math.min(v0, v1);
+		const maxV = Math.max(v0, v1);
+		var edgeIndex = -1;
+		// try to find existing edge
+		for (var i = 0, il = this.edges.length; i < il; ++i) {
+			if (this.edges[i].v[0] == minV && this.edges[i].v[1] == maxV) {
+				edgeIndex = i;
+				break;
+			}
+		}
+		// now if there was no index found this is a new edge
+		if (-1 == edgeIndex) {
+			var edge = new EMEdge;
+			edge.v[0] = minV;
+			edge.v[1] = maxV;
+			edge.f[0] = fi;
+			edge.ov[0] = ov;
+			edgeIndex = this.edges.length;
+			this.edges.push(edge);
+			// add the edge to the vertices
+			this.vertices[minV].e.push(edgeIndex);
+			this.vertices[maxV].e.push(edgeIndex);
+		} else {
+			// just add the second face to the edge
+			this.edges[edgeIndex].f[1] = fi;
+			this.edges[edgeIndex].ov[1] = ov;
+		}
+		// now update the edge index in the faces array
+		this.faces[fi].e[ei] = edgeIndex;
+	}
+
+	this.generate = function(vertices, indices) {
+		// create all the vertices (each 3 elements are a single vertex, because this is float array)
+		for (var vi = 0, vil = vertices.length; vi < vil; vi += 3) {
+			this.vertices.push(new EMVertex);
+		}
+		// iterate over the indices, each 3 form a triangle
+		for (var fi = 0, fil = indices.length; fi < fil; fi += 3) {
+			this.faces.push(new EMFace);
+			// iterate over the exact verices and check for edges
+			const faceArrayIndex = fi / 3;
+			// process the edges
+			this.processEdge(indices[fi    ], indices[fi + 1], faceArrayIndex, 0, indices[fi + 2]);
+			this.processEdge(indices[fi + 1], indices[fi + 2], faceArrayIndex, 1, indices[fi    ]);
+			this.processEdge(indices[fi + 2], indices[fi    ], faceArrayIndex, 2, indices[fi + 1]);
+		}
+	}
+}
+
 var subdivider = null;
 
 var Subdivision = function(geometry) {
@@ -109,16 +183,37 @@ var Subdivision = function(geometry) {
 
 	this.subdivideGeometry = function subdivideGeometry(buffGeom) {
 		var retval = new THREE.BufferGeometry();
-		// TODO : real implementation
 		var oldVertices = buffGeom.getAttribute('position').array;
-		var newVertices = new Float32Array(oldVertices.length);
-		for (var i = 0, il = oldVertices.length; i < il; ++i) {
-			newVertices[i] = oldVertices[i] * 1.2;
-		}
-		retval.addAttribute('position', new THREE.BufferAttribute(newVertices, 3));
-		// copy the indices directly
-		var newIndices = new Uint16Array(buffGeom.getIndex('index').array);
-		retval.setIndex(new THREE.BufferAttribute(newIndices, 1));
+		var oldIndices = buffGeom.getIndex().array;
+		var edgeMesh = new EdgeMesh;
+		edgeMesh.generate(oldVertices, oldIndices);
+		const oldVertCount = edgeMesh.vertices.length;
+		const oldEdgeCount = edgeMesh.edges.length;
+		const oldFaceCount = edgeMesh.faces.length;
+		// now compute the new number of vertices using data from the edge mesh and the Euler formula
+		// we know that for a given mesh we can calculate the Euler characteristic using his formula:
+		//  Chi = V - E + F
+		// The subdivision does not change the Euler characteristic of the mesh, thus we may use it
+		// to calculate the new number of vertices, noting that the subdivision will increase the
+		// number of faces exactly 4 times and the number of edges is calculated based on existing
+		// faces and edges - each subdivided faces generates 3 new edges and each subdivided edge
+		// generates 2 new edges
+		//
+		//  *---*---*
+		//   \ / \ /
+		//    *---*
+		//     \ /
+		//      *
+		//
+		const Chi = oldVertCount - oldEdgeCount + oldFaceCount;
+		const newEdgeCount = oldEdgeCount * 2 + oldFaceCount * 3;
+		const newFaceCount = oldFaceCount * 4;
+		// So moving the variables around we get:
+		//  V = E - F + Chi;
+		const newVertCount = newEdgeCount - newFaceCount + Chi;
+
+		// TODO
+
 		retval.computeBoundingSphere();
 		retval.computeVertexNormals();
 		return retval;
