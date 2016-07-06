@@ -583,6 +583,10 @@ function createPredefinedGeometries() {
 	predefinedGeometries['ring'] = new THREE.RingGeometry(defaultRadius / 2, defaultRadius, 8, 2);
 	predefinedGeometries['torus'] = new THREE.TorusGeometry(defaultRadius, 1);
 	predefinedGeometries['torusKnot'] = new THREE.TorusKnotGeometry(defaultRadius, defaultRadius / 5);
+	// fixup some geometries that are not indexed properly
+	predefinedGeometries['sphere'].mergeVertices();
+	predefinedGeometries['ring'].mergeVertices();
+	predefinedGeometries['torus'].mergeVertices();
 }
 
 function createMaterials() {
