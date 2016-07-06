@@ -28,9 +28,11 @@ const epsilon = 1e-6;
 const subdivMax = 8;
 const uint16Max = 65535;
 const uint32Max = 4294967295;
+const defaultRadius = 4; //!< default radius of geometries
 
 var params = {
 	geometry: 'tetrahedron',
+	subdivAmount: 0,
 	material: 'phongFlat',
 	meshColor: '#0080ff',
 	surface: true,
@@ -38,7 +40,7 @@ var params = {
 	wireframe: true,
 	originalColor: '#ff20ff',
 	original: true,
-	subdivAmount: 0,
+	backgroundColor: '#3a3a3a',
 };
 
 var paramControllers = {
@@ -82,6 +84,7 @@ var currentParams = {
 	meshColor: new THREE.Color(parseInt(params.meshColor.replace('#', '0x'))),
 	wireColor: new THREE.Color(parseInt(params.wireColor.replace('#', '0x'))),
 	originalColor: new THREE.Color(parseInt(params.originalColor.replace('#', '0x'))),
+	backgroundColor: new THREE.Color(parseInt(params.backgroundColor.replace('#', '0x'))),
 	material: params.material,
 };
 
@@ -459,6 +462,7 @@ function changeMeshColor() {
 }
 
 function changeWireMeshColor() {
+	info.style.color = params.wireColor;
 	currentParams.wireColor = new THREE.Color(parseInt(params.wireColor.replace('#', '0x')));
 	currentParams.wireMat.color = currentParams.wireColor;
 	currentParams.wireMat.needsUpdate = true;
@@ -468,6 +472,11 @@ function changeOriginalColor() {
 	currentParams.originalColor = new THREE.Color(parseInt(params.originalColor.replace('#', '0x')));
 	currentParams.origMat.color = currentParams.originalColor;
 	currentParams.origMat.needsUpdate = true;
+}
+
+function changeBackgroundColor() {
+	currentParams.backgroundColor = new THREE.Color(parseInt(params.backgroundColor.replace('#', '0x')));
+	renderer.setClearColor(currentParams.backgroundColor);
 }
 
 function changeMeshSurface() {
@@ -508,17 +517,17 @@ function createDefaultGeometry() {
 }
 
 function createPredefinedGeometries() {
-	predefinedGeometries['tetrahedron'] = new THREE.TetrahedronGeometry(4);
-	predefinedGeometries['cube'] = new THREE.BoxGeometry(4, 4, 4);
-	predefinedGeometries['sphere'] = new THREE.SphereGeometry(4, 4, 4);
-	predefinedGeometries['icosahedron'] = new THREE.IcosahedronGeometry(4);
-	predefinedGeometries['dodecahedron'] = new THREE.DodecahedronGeometry(4);
+	predefinedGeometries['tetrahedron'] = new THREE.TetrahedronGeometry(defaultRadius);
+	predefinedGeometries['cube'] = new THREE.BoxGeometry(defaultRadius, defaultRadius, defaultRadius);
+	predefinedGeometries['sphere'] = new THREE.SphereGeometry(defaultRadius, 4, 4);
+	predefinedGeometries['icosahedron'] = new THREE.IcosahedronGeometry(defaultRadius);
+	predefinedGeometries['dodecahedron'] = new THREE.DodecahedronGeometry(defaultRadius);
 	// init the irregular shapes too
-	predefinedGeometries['plane'] = new THREE.PlaneGeometry(8, 2, 2, 2);
-	predefinedGeometries['cone'] = new THREE.ConeGeometry(4, 8, 8);
-	predefinedGeometries['ring'] = new THREE.RingGeometry(2, 4, 8, 2);
-	predefinedGeometries['torus'] = new THREE.TorusGeometry(4, 1);
-	predefinedGeometries['torusKnot'] = new THREE.TorusKnotGeometry(4, 0.8);
+	predefinedGeometries['plane'] = new THREE.PlaneGeometry(defaultRadius * 2, 2, 2, 2);
+	predefinedGeometries['cone'] = new THREE.ConeGeometry(defaultRadius, 8, 8);
+	predefinedGeometries['ring'] = new THREE.RingGeometry(defaultRadius / 2, defaultRadius, 8, 2);
+	predefinedGeometries['torus'] = new THREE.TorusGeometry(defaultRadius, 1);
+	predefinedGeometries['torusKnot'] = new THREE.TorusKnotGeometry(defaultRadius, defaultRadius / 5);
 }
 
 function createMaterials() {
@@ -552,18 +561,18 @@ function init() {
 	if (!Detector.webgl)
 		Detector.addGetWebGLMessage();
 
-	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 30 );
+	camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, defaultRadius * 10);
 
 	controls = new THREE.OrbitControls(camera);
 	controls.addEventListener('change', render);
 	// some custom control settings
 	controls.enablePan = false;
-	controls.minDistance = 2;
-	controls.maxDistance = 12;
-	controls.zoomSpeed = 2.0;
+	controls.minDistance = defaultRadius / 4.0;
+	controls.maxDistance = defaultRadius * 4.0;
+	controls.zoomSpeed = defaultRadius / 2.0;
 	controls.target = new THREE.Vector3(0, 0, 0);
 
-	camera.position.x = 9;
+	camera.position.x = defaultRadius * 2.5;
 
 	// world
 	scene = new THREE.Scene();
@@ -583,7 +592,7 @@ function init() {
 	// renderer
 	renderer = new THREE.WebGLRenderer( {antialias: true } );
 	renderer.setSize( window.innerWidth, window.innerHeight );
-	renderer.shadowMap.enabled = true;
+	renderer.setClearColor(currentParams.backgroundColor);
 
 	container = document.getElementById('container');
 	container.appendChild(renderer.domElement);
@@ -615,6 +624,7 @@ function init() {
 	gui.add(params, 'wireframe').onChange(changeMeshWireframe);
 	gui.addColor(params, 'originalColor').name('original color').onChange(changeOriginalColor);
 	gui.add(params, 'original').onChange(changeMeshOriginal);
+	gui.addColor(params, 'backgroundColor').name('background color').onChange(changeBackgroundColor);
 
 	createPredefinedGeometries();
 	createMaterials();
