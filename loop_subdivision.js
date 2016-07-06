@@ -469,6 +469,30 @@ function changeMeshGeometry() {
 	}
 }
 
+// normalizes a geometry so it is centered in (0, 0, 0) and the
+// radius of its bounding sphere is the defaultRadius
+function normalizeGeometry(geom) {
+	// first compute the bounding sphere - it will give us both current radius
+	// and center of the object
+	geom.computeBoundingSphere();
+	// the scale factor is obtained the sphere radius
+	const scaleFactor = defaultRadius / geom.boundingSphere.radius;
+	// now scale all the vertices by the scale factor
+	for (var i = 0, il = geom.vertices.length; i < il; ++i) {
+		geom.vertices[i].multiplyScalar(scaleFactor);
+	}
+	// now compute the bounding sphere again
+	geom.computeBoundingSphere();
+	// now use its center as offset for centering the geometry
+	var offset = geom.boundingSphere.center;
+	offset.negate();
+	for (var i = 0, il = geom.vertices.length; i < il; ++i) {
+		geom.vertices[i].add(offset);
+	}
+	// finaly compute the bounding sphere again, just to be correct
+	geom.computeBoundingSphere();
+}
+
 function onFileSelect() {
 	var objNum = 0;
 	var objFile = fopen.files[0];
@@ -484,6 +508,7 @@ function onFileSelect() {
 				stdGeom.computeFaceNormals();
 				stdGeom.mergeVertices();
 				stdGeom.computeVertexNormals();
+				normalizeGeometry(stdGeom);
 				changeMeshFromGeometry(stdGeom);
 				// change the name of the current geometry so we could dispose of it
 				// properly later
