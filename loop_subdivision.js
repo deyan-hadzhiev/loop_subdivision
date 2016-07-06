@@ -41,6 +41,7 @@ var params = {
 	originalColor: '#ff20ff',
 	original: true,
 	backgroundColor: '#3a3a3a',
+	autoRotate: true,
 };
 
 var paramControllers = {
@@ -553,6 +554,18 @@ function createMaterials() {
 	});
 }
 
+function changeAutoRotation() {
+	if (!params.autoRotate) {
+		currentParams.mesh.rotation.x = 0;
+		currentParams.mesh.rotation.y = 0;
+		currentParams.wireMesh.rotation.x = 0;
+		currentParams.wireMesh.rotation.y = 0;
+		currentParams.origMesh.rotation.x = 0;
+		currentParams.origMesh.rotation.y = 0;
+		startTime = Date.now();
+	}
+}
+
 // WebGL initialization and implementation
 
 window.addEventListener('load', init);
@@ -625,6 +638,7 @@ function init() {
 	gui.addColor(params, 'originalColor').name('original color').onChange(changeOriginalColor);
 	gui.add(params, 'original').onChange(changeMeshOriginal);
 	gui.addColor(params, 'backgroundColor').name('background color').onChange(changeBackgroundColor);
+	gui.add(params, 'autoRotate').onChange(changeAutoRotation);
 
 	createPredefinedGeometries();
 	createMaterials();
@@ -640,8 +654,15 @@ function init() {
 }
 
 function updateScene() {
-	// TODO
-	var dTime = Date.now() - startTime;
+	if (params.autoRotate) {
+		var dTime = (Date.now() - startTime) * 0.0005;
+		currentParams.mesh.rotation.x = dTime;
+		currentParams.mesh.rotation.y = dTime;
+		currentParams.wireMesh.rotation.x = dTime;
+		currentParams.wireMesh.rotation.y = dTime;
+		currentParams.origMesh.rotation.x = dTime;
+		currentParams.origMesh.rotation.y = dTime;
+	}
 }
 
 // GUI
