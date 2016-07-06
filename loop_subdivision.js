@@ -22,6 +22,11 @@ var camera, controls, scene, renderer;
 var gui;
 var startTime = Date.now();
 var info;
+var infoDirty = false;
+
+var fopen;
+var loadManager;
+var objLoader;
 
 // some constants
 const epsilon = 1e-6;
@@ -60,6 +65,7 @@ var predefinedGeometriesNames = [
 	'ring',
 	'torus',
 	'torusKnot',
+	'OBJ file...',
 ];
 
 var predefinedGeometries = [];
@@ -74,6 +80,7 @@ var materialNames = [
 var materials = [];
 
 var currentParams = {
+	currentGeometryName: params.geometry,
 	subdivAmount: -1,
 	originalGeometry: null,
 	currentGeometry: null,
@@ -427,7 +434,7 @@ function updateInfo() {
 	info.innerHTML += ' | Current faces: ' + subdivider.info[currentParams.subdivAmount].faceCount;
 }
 
-function changeMeshGeometry() {
+function changeMeshFromGeometry(geometry) {
 	if (subdivider) {
 		subdivider.dispose();
 		delete subdivider;
@@ -436,7 +443,7 @@ function changeMeshGeometry() {
 		params.subdivAmount = 0;
 		paramControllers.subdivAmount.updateDisplay();
 	}
-	currentParams.originalGeometry = predefinedGeometries[params.geometry];
+	currentParams.originalGeometry = geometry;
 	currentParams.origMesh.geometry = currentParams.originalGeometry;
 	currentParams.origMesh.visible = false;
 	// create a new subdivider
@@ -446,6 +453,53 @@ function changeMeshGeometry() {
 	currentParams.mesh.geometry = currentParams.currentGeometry;
 	currentParams.wireMesh.geometry = currentParams.currentGeometry;
 	updateInfo();
+}
+
+function changeMeshGeometry() {
+	// if the current geometry type is already an OBJ file, we should dispose of it first
+	if (currentParams.currentGeometryName == 'OBJ file...') {
+		currentParams.originalGeometry.dispose();
+		currentParams.currentGeometryName = '';
+	}
+	if (params.geometry == 'OBJ file...') {
+		fopen.click();
+	} else {
+		changeMeshFromGeometry(predefinedGeometries[params.geometry]);
+		currentParams.currentGeometryName = params.geometry;
+	}
+}
+
+function onFileSelect() {
+	var objNum = 0;
+	var objFile = fopen.files[0];
+	var objURL = window.URL.createObjectURL(objFile);
+	objLoader.load(objURL,
+		// on object
+		function(object) {
+			// load only the first object
+			if (objNum < 1) {
+				// ... and only the first mesh from the object
+				var geom = object.children[0].geometry;
+				var stdGeom = new THREE.Geometry().fromBufferGeometry(geom);
+				stdGeom.computeFaceNormals();
+				stdGeom.mergeVertices();
+				stdGeom.computeVertexNormals();
+				changeMeshFromGeometry(stdGeom);
+				// change the name of the current geometry so we could dispose of it
+				// properly later
+				currentParams.currentGeometryName = 'OBJ file...';
+				geom.dispose();
+				objNum++;
+				infoDirty = true;
+			}
+		},
+		// on progress
+		function(xhr) {},
+		// on error
+		function(xhr) {
+			info.innerHTML = 'Error loading file';
+		}
+	);
 }
 
 function changeMeshMaterial() {
@@ -619,6 +673,13 @@ function init() {
 	info.innerHTML = '';
 	container.appendChild(info);
 
+	fopen = document.createElement('input');
+	fopen.type = 'file';
+	fopen.accept = '.obj';
+	fopen.multiple = '';
+	fopen.style.visibility = 'hidden';
+	fopen.onchange = onFileSelect;
+
 	stats = new Stats();
 	stats.domElement.style.position = 'absolute';
 	stats.domElement.style.top = '0px';
@@ -640,6 +701,13 @@ function init() {
 	gui.addColor(params, 'backgroundColor').name('background color').onChange(changeBackgroundColor);
 	gui.add(params, 'autoRotate').onChange(changeAutoRotation);
 
+	loadManager = new THREE.LoadingManager();
+	loadManager.onProgress = function(item, loaded, total) {
+		info.innerHTML = 'Loading ' + item.toString() + ' : ' + (loaded * 100) / total + ' %';
+	};
+
+	objLoader = new THREE.OBJLoader(loadManager);
+
 	createPredefinedGeometries();
 	createMaterials();
 	createDefaultGeometry();
@@ -654,6 +722,10 @@ function init() {
 }
 
 function updateScene() {
+	if (infoDirty) {
+		updateInfo();
+		infoDirty = false;
+	}
 	if (params.autoRotate) {
 		var dTime = (Date.now() - startTime) * 0.0005;
 		currentParams.mesh.rotation.x = dTime;
