@@ -65,6 +65,8 @@ var predefinedGeometriesNames = [
 	'ring',
 	'torus',
 	'torusKnot',
+	'teapot',
+	'bunny',
 	'OBJ file...',
 ];
 
@@ -527,6 +529,20 @@ function onFileSelect() {
 	);
 }
 
+function loadAsset(predefinedName, assetUrl) {
+	objLoader.load(assetUrl,
+		function(object) {
+			var geom = object.children[0].geometry;
+			var stdGeom = new THREE.Geometry().fromBufferGeometry(geom);
+			stdGeom.computeFaceNormals();
+			stdGeom.mergeVertices();
+			stdGeom.computeVertexNormals();
+			normalizeGeometry(stdGeom);
+			predefinedGeometries[predefinedName] = stdGeom;
+		}
+	);
+}
+
 function changeMeshMaterial() {
 	currentParams.mesh.material = materials[params.material];
 	currentParams.material = params.material;
@@ -612,6 +628,9 @@ function createPredefinedGeometries() {
 	predefinedGeometries['sphere'].mergeVertices();
 	predefinedGeometries['ring'].mergeVertices();
 	predefinedGeometries['torus'].mergeVertices();
+	// load obj assets
+	loadAsset('teapot', 'assets/teapot.obj');
+	loadAsset('bunny', 'assets/bunny.obj');
 }
 
 function createMaterials() {
