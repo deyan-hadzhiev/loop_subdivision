@@ -46,7 +46,7 @@ var params = {
 	originalColor: '#ff20ff',
 	original: true,
 	backgroundColor: '#3a3a3a',
-	autoRotate: true,
+	autoRotate: false,
 };
 
 var paramControllers = {
