@@ -21,10 +21,11 @@ var container, stats
 var camera, controls, scene, renderer;
 var gui;
 var startTime = Date.now();
+var info;
 
 // some constants
 const epsilon = 1e-6;
-const subdivMax = 6;
+const subdivMax = 8;
 const uint16Max = 65535;
 const uint32Max = 4294967295;
 
@@ -107,6 +108,7 @@ var EdgeMesh = function() {
 	this.faces = [];
 	this.vertices = [];
 	this.edges = [];
+	this.edgeMap = []; // hash map for faster edge look up to avoid double loop and thus n * n complexity
 
 	// v0 - index of the first vertex
 	// v1 - index of the second vertex
@@ -117,12 +119,11 @@ var EdgeMesh = function() {
 		const minV = Math.min(v0, v1);
 		const maxV = Math.max(v0, v1);
 		var edgeIndex = -1;
-		// try to find existing edge
-		for (var i = 0, il = this.edges.length; i < il; ++i) {
-			if (this.edges[i].v[0] == minV && this.edges[i].v[1] == maxV) {
-				edgeIndex = i;
-				break;
-			}
+		var edgeKey = minV.toString() + '_' + maxV.toString();
+		if (edgeKey in this.edgeMap) {
+			edgeIndex = this.edgeMap[edgeKey];
+		} else {
+			this.edgeMap[edgeKey] = this.edges.length; // this will be the new edge index
 		}
 		// now if there was no index found this is a new edge
 		if (-1 == edgeIndex) {
@@ -203,6 +204,10 @@ var Subdivision = function(geometry) {
 	}
 	this.initialGeometry.computeBoundingSphere();
 	this.cachedSubdivisions = [];
+	this.info = [{
+		vertexCount: this.initialGeometry.getAttribute('position').array.length / 3,
+		faceCount: this.initialGeometry.getIndex().array.length / 3
+	}];
 
 	// functions
 	this.dispose = function dispose() {
@@ -220,6 +225,10 @@ var Subdivision = function(geometry) {
 		} else {
 			var previousSubdiv = this.subdivide(num - 1);
 			var subdivided = this.subdivideGeometry(previousSubdiv);
+			this.info[num] = {
+				vertexCount: subdivided.getAttribute('position').array.length / 3,
+				faceCount: subdivided.getIndex().array.length / 3
+			};
 			this.cachedSubdivisions[num - 1] = subdivided;
 			return subdivided;
 		}
@@ -383,11 +392,6 @@ var Subdivision = function(geometry) {
 		delete edgeMesh;
 		retval.computeBoundingSphere();
 		retval.computeVertexNormals();
-		// for big geometries recompute the buffers
-		if (newVertCount > uint16Max) {
-			// not sure if this is working ATM
-			retval.computeOffsets();
-		}
 		return retval;
 	}
 
@@ -406,10 +410,18 @@ function subdivide(num) {
 		currentParams.wireMesh.geometry = currentParams.currentGeometry;
 		// change the visibility of the original mesh
 		currentParams.origMesh.visible = params.original && num > 0;
+		updateInfo();
 	}
 }
 
 // Change events
+
+function updateInfo() {
+	info.innerHTML = 'Orignal vertices: ' + subdivider.info[0].vertexCount + ' | Original faces: ' + subdivider.info[0].faceCount;
+	info.innerHTML += '<br>Current subdivision amount: ' + currentParams.subdivAmount;
+	info.innerHTML += '<br>Current vertices: ' + subdivider.info[currentParams.subdivAmount].vertexCount;
+	info.innerHTML += ' | Current faces: ' + subdivider.info[currentParams.subdivAmount].faceCount;
+}
 
 function changeMeshGeometry() {
 	if (subdivider) {
@@ -429,6 +441,7 @@ function changeMeshGeometry() {
 	currentParams.subdivAmount = 0;
 	currentParams.mesh.geometry = currentParams.currentGeometry;
 	currentParams.wireMesh.geometry = currentParams.currentGeometry;
+	updateInfo();
 }
 
 function changeMeshMaterial() {
@@ -473,6 +486,7 @@ function createDefaultGeometry() {
 	currentParams.originalGeometry = predefinedGeometries[params.geometry];
 	subdivider = new Subdivision(currentParams.originalGeometry);
 	currentParams.currentGeometry = subdivider.subdivide(0);
+	currentParams.subdivAmount = 0;
 	currentParams.mesh = new THREE.Mesh(
 		currentParams.currentGeometry
 	);
@@ -545,7 +559,7 @@ function init() {
 	// some custom control settings
 	controls.enablePan = false;
 	controls.minDistance = 2;
-	controls.maxDistance = 10;
+	controls.maxDistance = 12;
 	controls.zoomSpeed = 2.0;
 	controls.target = new THREE.Vector3(0, 0, 0);
 
@@ -574,6 +588,15 @@ function init() {
 	container = document.getElementById('container');
 	container.appendChild(renderer.domElement);
 
+	info = document.createElement('div');
+	info.style.position = 'absolute';
+	info.style.top = '10px';
+	info.style.width = '100%';
+	info.style.textAlign = 'center';
+	info.style.color = '#ffffff';
+	info.innerHTML = '';
+	container.appendChild(info);
+
 	stats = new Stats();
 	stats.domElement.style.position = 'absolute';
 	stats.domElement.style.top = '0px';
@@ -596,6 +619,8 @@ function init() {
 	createPredefinedGeometries();
 	createMaterials();
 	createDefaultGeometry();
+
+	updateInfo();
 
 	updateScene();
 
