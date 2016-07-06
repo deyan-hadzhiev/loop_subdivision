@@ -599,7 +599,7 @@ function createDefaultGeometry() {
 function createPredefinedGeometries() {
 	predefinedGeometries['tetrahedron'] = new THREE.TetrahedronGeometry(defaultRadius);
 	predefinedGeometries['cube'] = new THREE.BoxGeometry(defaultRadius, defaultRadius, defaultRadius);
-	predefinedGeometries['sphere'] = new THREE.SphereGeometry(defaultRadius, 4, 4);
+	predefinedGeometries['sphere'] = new THREE.SphereGeometry(defaultRadius, 16, 9);
 	predefinedGeometries['icosahedron'] = new THREE.IcosahedronGeometry(defaultRadius);
 	predefinedGeometries['dodecahedron'] = new THREE.DodecahedronGeometry(defaultRadius);
 	// init the irregular shapes too
