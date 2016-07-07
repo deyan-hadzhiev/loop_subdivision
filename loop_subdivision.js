@@ -407,8 +407,6 @@ var Subdivision = function(geometry) {
 		retval.computeVertexNormals();
 		return retval;
 	}
-
-	this.computeNormals
 }
 
 function subdivide(num) {
